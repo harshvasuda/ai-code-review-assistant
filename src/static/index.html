@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Code Review Assistant</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2330;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --accent:    #3b82f6;
+      --accent-h:  #60a5fa;
+      --green:     #2ea043;
+      --green-l:   #3fb950;
+      --yellow:    #d29922;
+      --yellow-l:  #e3b341;
+      --red:       #da3633;
+      --red-l:     #f85149;
+      --purple:    #8957e5;
+      --purple-l:  #a371f7;
+      --radius:    10px;
+      --font:      'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    body { font-family: var(--font); background: var(--bg); color: var(--text);
+           min-height: 100vh; line-height: 1.6; font-size: 14px; }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 32px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    header svg { flex-shrink: 0; }
+    header h1 { font-size: 17px; font-weight: 600; letter-spacing: .3px; }
+    header span { font-size: 12px; color: var(--muted);
+                  background: var(--surface2); border: 1px solid var(--border);
+                  border-radius: 20px; padding: 2px 10px; margin-left: auto; }
+
+    main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; display: grid;
+           grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+
+    /* ── Panel ─────────────────────────────────────────────────────── */
+    .panel { background: var(--surface); border: 1px solid var(--border);
+             border-radius: var(--radius); padding: 20px; }
+    .panel-title { font-size: 13px; font-weight: 600; color: var(--muted);
+                   text-transform: uppercase; letter-spacing: .8px; margin-bottom: 14px; }
+
+    /* ── Samples ────────────────────────────────────────────────────── */
+    .samples { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .sample-btn {
+      font-size: 12px; padding: 4px 12px; border-radius: 20px; cursor: pointer;
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      transition: border-color .15s, background .15s;
+    }
+    .sample-btn:hover { border-color: var(--accent); background: #1a2333; }
+
+    /* ── Controls ───────────────────────────────────────────────────── */
+    .controls { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; }
+    select {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px; padding: 7px 12px;
+      font-size: 13px; cursor: pointer; outline: none;
+    }
+    select:focus { border-color: var(--accent); }
+
+    textarea {
+      width: 100%; min-height: 320px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 12.5px; line-height: 1.65; padding: 14px; resize: vertical;
+      outline: none; transition: border-color .15s;
+    }
+    textarea:focus { border-color: var(--accent); }
+
+    /* ── Analyze button ─────────────────────────────────────────────── */
+    #analyzeBtn {
+      margin-top: 14px; width: 100%; padding: 11px; border: none;
+      border-radius: 8px; background: var(--accent); color: #fff;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: background .15s, opacity .15s;
+    }
+    #analyzeBtn:hover { background: var(--accent-h); }
+    #analyzeBtn:disabled { opacity: .55; cursor: not-allowed; }
+
+    .spinner {
+      width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin .7s linear infinite; display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results ────────────────────────────────────────────────────── */
+    #results { display: none; }
+    #results.visible { display: block; }
+
+    /* Score badge */
+    .score-row { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+    .score-badge {
+      width: 72px; height: 72px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-weight: 700; flex-shrink: 0; border: 3px solid;
+    }
+    .score-badge .num  { font-size: 26px; line-height: 1; }
+    .score-badge .denom { font-size: 11px; color: var(--muted); }
+    .score-high   { border-color: var(--green-l);  color: var(--green-l); }
+    .score-mid    { border-color: var(--yellow-l); color: var(--yellow-l); }
+    .score-low    { border-color: var(--red-l);    color: var(--red-l); }
+
+    .summary-text { font-size: 13.5px; color: var(--text); line-height: 1.7; flex: 1; }
+
+    /* Copy button */
+    #copyBtn {
+      flex-shrink: 0; align-self: flex-start;
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 13px; border-radius: 6px; cursor: pointer;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); font-size: 12px; font-weight: 500;
+      transition: border-color .15s, color .15s, background .15s;
+      white-space: nowrap;
+    }
+    #copyBtn:hover { border-color: var(--accent); color: var(--accent); background: rgba(59,130,246,.06); }
+    #copyBtn.copied { border-color: var(--green-l); color: var(--green-l); background: rgba(46,160,67,.08); }
+
+    /* Toast notification */
+    #copyToast {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(12px);
+      background: var(--surface2); border: 1px solid var(--green-l);
+      color: var(--green-l); font-size: 13px; font-weight: 500;
+      padding: 8px 20px; border-radius: 20px;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s ease, transform .2s ease;
+      z-index: 999;
+    }
+    #copyToast.show {
+      opacity: 1; transform: translateX(-50%) translateY(0);
+    }
+
+    /* Category section */
+    .cat-section { margin-top: 18px; }
+    .cat-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px; border-radius: 8px 8px 0 0;
+      border: 1px solid var(--border); cursor: pointer;
+      user-select: none; font-size: 13px; font-weight: 600;
+      background: var(--surface2);
+    }
+    .cat-header .cat-count {
+      margin-left: auto; font-size: 12px; font-weight: 500;
+      background: rgba(255,255,255,.07); border-radius: 20px;
+      padding: 1px 9px;
+    }
+    .cat-header .chevron { margin-left: 4px; transition: transform .2s; font-size: 11px; }
+    .cat-header.open .chevron { transform: rotate(90deg); }
+
+    .cat-body {
+      border: 1px solid var(--border); border-top: none;
+      border-radius: 0 0 8px 8px; overflow: hidden;
+      display: none;
+    }
+    .cat-body.open { display: block; }
+
+    .finding {
+      padding: 10px 14px; border-bottom: 1px solid var(--border);
+      display: grid; grid-template-columns: auto 1fr; gap: 10px;
+      align-items: start;
+    }
+    .finding:last-child { border-bottom: none; }
+    .finding-meta { display: flex; flex-direction: column; align-items: center;
+                    gap: 4px; min-width: 52px; }
+    .sev-dot {
+      width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0;
+    }
+    .line-tag { font-size: 10px; color: var(--muted); font-family: monospace; }
+    .finding-msg { font-size: 13px; color: var(--text); padding-top: 2px; line-height: 1.55; }
+
+    /* severity colours */
+    .sev-error   { background: var(--red-l); }
+    .sev-warning { background: var(--yellow-l); }
+    .sev-info    { background: var(--accent); }
+
+    /* category accent bars */
+    .cat-security   .cat-header { border-left: 3px solid var(--red-l); }
+    .cat-bug        .cat-header { border-left: 3px solid var(--yellow-l); }
+    .cat-quality    .cat-header { border-left: 3px solid var(--purple-l); }
+    .cat-readability .cat-header { border-left: 3px solid var(--accent-h); }
+
+    /* empty state */
+    #emptyState { text-align: center; padding: 40px 20px; color: var(--muted); }
+    #emptyState svg { display: block; margin: 0 auto 12px; opacity: .35; }
+
+    /* error banner */
+    #errorBanner {
+      display: none; background: rgba(218,54,51,.15); border: 1px solid var(--red);
+      border-radius: 8px; padding: 12px 16px; margin-top: 12px;
+      font-size: 13px; color: var(--red-l);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="16 18 22 12 16 6"/>
+    <polyline points="8 6 2 12 8 18"/>
+    <line x1="12" y1="2" x2="12" y2="22" stroke="#8957e5"/>
+  </svg>
+  <h1>AI Code Review Assistant</h1>
+  <span>v0.1.0</span>
+</header>
+
+<main>
+  <!-- ── Left: Input Panel ─────────────────────────────────────── -->
+  <div>
+    <div class="panel">
+      <p class="panel-title">Code Input</p>
+
+      <div class="samples">
+        <span style="font-size:12px;color:var(--muted);align-self:center;">Samples:</span>
+        <button class="sample-btn" data-sample="bugs">🐛 Bug-prone</button>
+        <button class="sample-btn" data-sample="security">🔐 Security</button>
+        <button class="sample-btn" data-sample="clean">✅ Clean code</button>
+        <button class="sample-btn" data-sample="diff">📄 Git diff</button>
+      </div>
+
+      <div class="controls">
+        <select id="langSelect">
+          <option value="python">Python</option>
+          <option value="javascript">JavaScript</option>
+          <option value="typescript">TypeScript</option>
+          <option value="go">Go</option>
+          <option value="java">Java</option>
+          <option value="rust">Rust</option>
+          <option value="sql">SQL</option>
+        </select>
+      </div>
+
+      <textarea id="codeInput" spellcheck="false"
+        placeholder="Paste your code or git diff here…"></textarea>
+
+      <button id="analyzeBtn">
+        <div class="spinner" id="spinner"></div>
+        <span id="btnLabel">⚡ Analyze Code</span>
+      </button>
+
+      <div id="errorBanner"></div>
+    </div>
+  </div>
+
+  <!-- ── Right: Results Panel ──────────────────────────────────── -->
+  <div>
+    <div class="panel">
+      <p class="panel-title">Review Results</p>
+
+      <div id="emptyState">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        Submit code on the left to see the analysis here.
+      </div>
+
+      <div id="results">
+        <!-- Score + summary -->
+        <div class="score-row">
+          <div class="score-badge" id="scoreBadge">
+            <span class="num" id="scoreNum">–</span>
+            <span class="denom">/ 10</span>
+          </div>
+          <p class="summary-text" id="summaryText"></p>
+          <button id="copyBtn" title="Copy review as GitHub-flavoured Markdown">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/>
+              <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>
+            </svg>
+            Copy Markdown
+          </button>
+        </div>
+
+        <!-- Category cards -->
+        <div id="catSecurity"    class="cat-section cat-security"></div>
+        <div id="catBug"         class="cat-section cat-bug"></div>
+        <div id="catQuality"     class="cat-section cat-quality"></div>
+        <div id="catReadability" class="cat-section cat-readability"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="copyToast">✓ Copied to clipboard!</div>
+
+<script>
+  /* ── Sample snippets ─────────────────────────────────────────────────── */
+  const SAMPLES = {
+    bugs: {
+      lang: 'python',
+      code: `def get_user_data(user_id, cache={}):
+    # TODO: add pagination support
+    if cache.get(user_id) == None:
+        data = fetch_from_db(user_id)
+        cache[user_id] = data
+    return cache[user_id]
+
+def process_items(items=[]):
+    results = []
+    for item in items:
+        try:
+            results.append(item / 0)
+        except:
+            pass
+    if results == True:
+        print("Done")
+    return results`
+    },
+    security: {
+      lang: 'python',
+      code: `import subprocess
+import pickle
+
+DB_PASSWORD = "p@ssw0rd_prod_2024"
+API_KEY = "sk-live-abc123xyz"
+
+def run_query(user_input):
+    query = "SELECT * FROM users WHERE name = '" + user_input + "'"
+    return db.execute(query)
+
+def load_session(data):
+    return pickle.loads(data)
+
+def run_cmd(user_cmd):
+    subprocess.run(user_cmd, shell=True)
+
+def risky_eval(expr):
+    return eval(expr)`
+    },
+    clean: {
+      lang: 'python',
+      code: `"""User authentication service."""
+
+import logging
+import os
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+def authenticate_user(username: str, password: str) -> Optional[dict]:
+    """Authenticate a user and return their profile or None.
+
+    Args:
+        username: The user's login name.
+        password: The plaintext password to verify.
+
+    Returns:
+        User dict on success, None on failure.
+    """
+    api_key = os.getenv("AUTH_API_KEY")
+    if not api_key:
+        raise EnvironmentError("AUTH_API_KEY is not configured.")
+
+    user = _lookup_user(username)
+    if user is None:
+        logger.warning("Login attempt for unknown user: %s", username)
+        return None
+
+    if not _verify_password(password, user["password_hash"]):
+        logger.warning("Failed login attempt for user: %s", username)
+        return None
+
+    logger.info("User authenticated: %s", username)
+    return user`
+    },
+    diff: {
+      lang: 'python',
+      code: `--- a/src/auth.py
++++ b/src/auth.py
+@@ -10,8 +10,12 @@
+ def login(username, password):
+-    query = "SELECT * FROM users WHERE user='" + username + "'"
+-    result = db.execute(query)
+-    if result:
+-        return True
++    secret = "hardcoded_jwt_secret"
++    query = "SELECT * FROM users WHERE user='" + username + "'"
++    result = db.execute(query)
++    try:
++        token = jwt.encode({"user": username}, secret)
++    except:
++        pass
++    return token`
+    }
+  };
+
+  /* ── Category metadata ───────────────────────────────────────────────── */
+  const CAT_META = {
+    security:    { label: 'Security',    icon: '🔐', id: 'catSecurity' },
+    bug:         { label: 'Bugs',        icon: '🐛', id: 'catBug' },
+    quality:     { label: 'Quality',     icon: '🔧', id: 'catQuality' },
+    readability: { label: 'Readability', icon: '📖', id: 'catReadability' },
+    general:     { label: 'General',     icon: 'ℹ️',  id: 'catQuality' },
+  };
+
+  /* ── DOM refs ────────────────────────────────────────────────────────── */
+  const codeInput   = document.getElementById('codeInput');
+  const langSelect  = document.getElementById('langSelect');
+  const analyzeBtn  = document.getElementById('analyzeBtn');
+  const btnLabel    = document.getElementById('btnLabel');
+  const spinner     = document.getElementById('spinner');
+  const errorBanner = document.getElementById('errorBanner');
+  const emptyState  = document.getElementById('emptyState');
+  const results     = document.getElementById('results');
+  const scoreBadge  = document.getElementById('scoreBadge');
+  const scoreNum    = document.getElementById('scoreNum');
+  const summaryText = document.getElementById('summaryText');
+  const copyBtn     = document.getElementById('copyBtn');
+  const copyToast   = document.getElementById('copyToast');
+
+  /* ── Last review result (for markdown export) ────────────────────────── */
+  let lastReviewData = null;
+
+  /* ── Sample buttons ─────────────────────────────────────────────────── */
+  document.querySelectorAll('.sample-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const s = SAMPLES[btn.dataset.sample];
+      codeInput.value = s.code.trimStart();
+      langSelect.value = s.lang;
+    });
+  });
+
+  /* ── Analyze ─────────────────────────────────────────────────────────── */
+  analyzeBtn.addEventListener('click', async () => {
+    const code = codeInput.value.trim();
+    if (!code) {
+      showError('Please paste some code or a git diff first.');
+      return;
+    }
+    setLoading(true);
+    hideError();
+
+    try {
+      const resp = await fetch('/api/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repository: 'local/demo',
+          code: code,
+          language: langSelect.value,
+        }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `Server error ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      renderResults(data);
+    } catch (e) {
+      showError(e.message || 'Unexpected error. Is the server running?');
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  /* ── Copy Markdown ───────────────────────────────────────────────────── */
+  copyBtn.addEventListener('click', () => {
+    if (!lastReviewData) return;
+    const md = buildMarkdown(lastReviewData);
+    navigator.clipboard.writeText(md).then(() => {
+      copyBtn.classList.add('copied');
+      copyBtn.querySelector('span') && (copyBtn.querySelector('span').textContent = 'Copied!');
+      // update button text node (last text node inside button)
+      const textNode = [...copyBtn.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
+      if (textNode) textNode.textContent = ' Copied!';
+      showToast();
+      setTimeout(() => {
+        copyBtn.classList.remove('copied');
+        if (textNode) textNode.textContent = ' Copy Markdown';
+      }, 2200);
+    }).catch(() => showError('Clipboard access denied by browser.'));
+  });
+
+  function buildMarkdown(data) {
+    const lang    = langSelect.value || 'unknown';
+    const score   = data.score ?? '?';
+    const summary = data.summary || '';
+    const groups  = { security: [], bug: [], quality: [], readability: [], general: [] };
+
+    for (const c of (data.comments || [])) {
+      const cat = c.category in groups ? c.category : 'general';
+      groups[cat].push(c);
+    }
+
+    const SEV_PREFIX = { error: '🔴', warning: '🟡', info: '🔵' };
+    const CAT_DISPLAY = [
+      { key: 'security',    label: '🔐 Security' },
+      { key: 'bug',         label: '🐛 Bugs & Edge Cases' },
+      { key: 'quality',     label: '🔧 Code Quality' },
+      { key: 'readability', label: '📖 Readability' },
+    ];
+
+    const scoreEmoji = score >= 8 ? '🟢' : score >= 5 ? '🟡' : '🔴';
+    const lines = [
+      `## AI Code Review — \`${lang}\``,
+      ``,
+      `### ${scoreEmoji} Overall Score: ${score} / 10`,
+      ``,
+      `> ${summary}`,
+      ``,
+    ];
+
+    let hasFindings = false;
+    for (const { key, label } of CAT_DISPLAY) {
+      const items = key === 'quality'
+        ? [...groups.quality, ...groups.general]
+        : groups[key];
+      if (!items.length) continue;
+      hasFindings = true;
+      lines.push(`### ${label}`, ``);
+      for (const f of items) {
+        const prefix = SEV_PREFIX[f.severity] || '⚪';
+        const linePart = f.line ? ` *(line ${f.line})*` : '';
+        lines.push(`- ${prefix} **[${f.severity.toUpperCase()}]**${linePart} ${f.message}`);
+      }
+      lines.push(``);
+    }
+
+    if (!hasFindings) lines.push(`*No issues detected. Looks good to merge!*`, ``);
+
+    lines.push(`---`, `*Generated by AI Code Review Assistant*`);
+    return lines.join('\n');
+  }
+
+  function showToast() {
+    copyToast.classList.add('show');
+    setTimeout(() => copyToast.classList.remove('show'), 2000);
+  }
+
+  /* ── Render ──────────────────────────────────────────────────────────── */
+  function renderResults(data) {
+    lastReviewData = data;
+    emptyState.style.display = 'none';
+    results.classList.add('visible');
+
+    // Score badge
+    const score = data.score ?? 0;
+    scoreNum.textContent = score;
+    scoreBadge.className = 'score-badge ' + (
+      score >= 8 ? 'score-high' : score >= 5 ? 'score-mid' : 'score-low'
+    );
+    summaryText.textContent = data.summary || '';
+
+    // Group findings by category
+    const groups = { security: [], bug: [], quality: [], readability: [], general: [] };
+    for (const c of (data.comments || [])) {
+      const cat = c.category in groups ? c.category : 'general';
+      groups[cat].push(c);
+    }
+
+    // Render each category card
+    Object.entries(CAT_META).forEach(([cat, meta]) => {
+      if (cat === 'general') return; // merged into quality
+      const allItems = cat === 'quality'
+        ? [...groups.quality, ...groups.general]
+        : groups[cat];
+      const el = document.getElementById(meta.id === 'catQuality' && cat === 'quality'
+        ? 'catQuality' : meta.id);
+      renderCategory(el, meta, allItems, cat);
+    });
+  }
+
+  function renderCategory(container, meta, items, cat) {
+    if (!items.length) { container.innerHTML = ''; return; }
+
+    const isOpen = cat === 'security' || cat === 'bug';
+    container.innerHTML = `
+      <div class="cat-header ${isOpen ? 'open' : ''}" data-cat="${cat}">
+        <span>${meta.icon}</span>
+        <span>${meta.label}</span>
+        <span class="cat-count">${items.length}</span>
+        <span class="chevron">▶</span>
+      </div>
+      <div class="cat-body ${isOpen ? 'open' : ''}">
+        ${items.map(findingHTML).join('')}
+      </div>`;
+
+    container.querySelector('.cat-header').addEventListener('click', function () {
+      this.classList.toggle('open');
+      this.nextElementSibling.classList.toggle('open');
+    });
+  }
+
+  function findingHTML(f) {
+    const sevClass = `sev-${f.severity}`;
+    const lineTag  = f.line ? `L${f.line}` : '';
+    return `
+      <div class="finding">
+        <div class="finding-meta">
+          <div class="sev-dot ${sevClass}" title="${f.severity}"></div>
+          ${lineTag ? `<span class="line-tag">${lineTag}</span>` : ''}
+        </div>
+        <p class="finding-msg">${escapeHTML(f.message)}</p>
+      </div>`;
+  }
+
+  /* ── Helpers ─────────────────────────────────────────────────────────── */
+  function setLoading(on) {
+    analyzeBtn.disabled = on;
+    spinner.style.display = on ? 'block' : 'none';
+    btnLabel.textContent  = on ? 'Analyzing…' : '⚡ Analyze Code';
+  }
+
+  function showError(msg) {
+    errorBanner.style.display = 'block';
+    errorBanner.textContent = '⚠ ' + msg;
+  }
+  function hideError() { errorBanner.style.display = 'none'; }
+
+  function escapeHTML(str) {
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>
