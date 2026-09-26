@@ -1,6 +1,6 @@
-# AI Developer Workflow Assistant
+# AI Code Review & PR Assistant
 
-An intelligent assistant designed to streamline the developer workflow by automating repetitive tasks, providing context-aware code suggestions, and integrating with common development tools.
+An automated security auditing and pull request review engine built with FastAPI, AST-based code analysis, and IBM Bob IDE.
 
 ---
 
@@ -12,141 +12,50 @@ An intelligent assistant designed to streamline the developer workflow by automa
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
-  - [Configuration](#configuration)
 - [Usage](#usage)
-- [Contributing](#contributing)
+- [IBM Bob 2.0 Integration](#ibm-bob-20-integration)
 - [License](#license)
 
 ---
 
 ## Overview
 
-The **AI Developer Workflow Assistant** is a developer-focused tool that combines large language model (LLM) capabilities with first-class integrations for code editors, CI/CD pipelines, and project management systems. It helps developers spend less time on boilerplate and context-switching, and more time solving meaningful problems.
+The **AI Code Review & PR Assistant** is a developer-focused tool designed to streamline pull request auditing and code reviews. By combining static Abstract Syntax Tree (AST) analysis with rule-based heuristics, it automatically inspects Git diffs for potential security vulnerabilities, bad practices, and anti-patterns, generating clear and actionable Markdown reports for GitHub pull requests.
 
 Key goals:
-- **Reduce friction** in day-to-day development tasks.
-- **Provide accurate, context-aware** code completions and explanations.
-- **Integrate seamlessly** into existing toolchains without requiring workflow changes.
+- **Accelerate PR turnaround** by catching common anti-patterns before human reviewers step in.
+- **Surface security risks** like hardcoded secrets, dangerous evaluations, and SQL injection vectors.
+- **Provide zero-friction setup** with a fast, lightweight Python and FastAPI engine.
 
 ---
 
 ## Features
 
-- 🔍 **Codebase-Aware Q&A** — Ask questions about your project and receive answers grounded in the actual source code.
-- ✏️ **Code Generation & Refactoring** — Generate boilerplate, refactor functions, and apply design patterns on demand.
-- 🔗 **Tool Integrations** — Built-in connectors for GitHub, Jira, Slack, and popular CI/CD systems.
-- 📋 **Task Automation** — Automate pull request summaries, changelog generation, and code review checklists.
-- 🛡️ **Security Scanning** — Identify common vulnerabilities and suggest remediation inline.
-- 📊 **Metrics Dashboard** — Track assistant usage, time saved, and suggestion acceptance rates.
+- 🔍 **AST-Based Static Analysis** — Inspects Python code using the standard AST library to spot syntax and structural issues without executing untrusted code.
+- ⚡ **Git Diff Parsing** — Automatically extracts added/modified lines from Git diffs to target the review precisely on incoming changes.
+- 🛡️ **Security Rule Auditing** — Detects hardcoded API keys/passwords, unsafe calls (`eval`, `exec`), and insecure SQL queries.
+- 📋 **One-Click Markdown Export** — Produces ready-to-post pull request review comments with severity badges and actionable suggestions.
+- 📊 **Developer Dashboard** — Simple and responsive web UI for pasting diffs and viewing instant review breakdowns.
 
 ---
 
 ## Project Structure
 
-```
-ai-dev-workflow-assistant/
+```text
+ai-code-review-assistant/
 ├── src/
-│   ├── api/                  # REST & WebSocket API layer
-│   │   ├── routes/           # Endpoint definitions
-│   │   └── middleware/       # Auth, logging, rate-limiting
-│   ├── core/                 # Core assistant logic
-│   │   ├── agent/            # LLM agent orchestration
-│   │   ├── context/          # Codebase indexing & retrieval
-│   │   └── tools/            # Built-in tool definitions
-│   ├── integrations/         # Third-party service connectors
-│   │   ├── github/
-│   │   ├── jira/
-│   │   └── slack/
-│   ├── models/               # Data models & schemas
-│   └── utils/                # Shared utilities and helpers
-├── tests/
-│   ├── unit/                 # Unit tests
-│   ├── integration/          # Integration tests
-│   └── e2e/                  # End-to-end tests
-├── docs/                     # Additional documentation
-├── scripts/                  # Build, migration, and setup scripts
-├── .env.example              # Example environment variable file
-├── package.json              # Node.js dependencies & scripts
-├── tsconfig.json             # TypeScript configuration
-└── README.md                 # This file
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- **Node.js** v18 or higher
-- **npm** v9 or higher (or **yarn** / **pnpm**)
-- An API key for your chosen LLM provider (e.g., OpenAI, watsonx.ai)
-
-### Installation
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/ai-dev-workflow-assistant.git
-cd ai-dev-workflow-assistant
-
-# 2. Install dependencies
-npm install
-
-# 3. Copy the example environment file and fill in your values
-cp .env.example .env
-```
-
-### Configuration
-
-Edit `.env` with the required values:
-
-```env
-# LLM Provider
-LLM_PROVIDER=openai          # openai | watsonx
-LLM_API_KEY=your_api_key_here
-LLM_MODEL=gpt-4o
-
-# Server
-PORT=3000
-NODE_ENV=development
-
-# Integrations (optional)
-GITHUB_TOKEN=your_github_token
-JIRA_BASE_URL=https://your-org.atlassian.net
-JIRA_API_TOKEN=your_jira_token
-SLACK_BOT_TOKEN=your_slack_token
-```
-
----
-
-## Usage
-
-```bash
-# Start the development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start the production server
-npm start
-
-# Run the test suite
-npm test
-```
-
-Once the server is running, visit `http://localhost:3000` to access the assistant interface, or connect via the provided API endpoints documented in [`docs/api.md`](docs/api.md).
-
----
-
-## Contributing
-
-Contributions are welcome! Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines on:
-- Branching strategy
-- Commit message conventions
-- Running tests before submitting a pull request
-
----
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── routes.py             # FastAPI review endpoints
+│   ├── services/
+│   │   ├── __init__.py
+│   │   └── reviewer.py           # AST engine & Git diff inspection logic
+│   ├── static/
+│   │   └── index.html            # Interactive web dashboard
+│   ├── __init__.py
+│   └── main.py                   # FastAPI application entrypoint
+├── bob-session-proof.png         # IBM Bob IDE session verification
+├── .env.example                  # Example environment config
+├── .gitignore                    # Ignored files
+├── requirements.txt              # Python project dependencies
+└── README.md                     # Project documentation
